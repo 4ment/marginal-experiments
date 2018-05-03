@@ -1,0 +1,14 @@
+{
+"physher":[
+	{
+		"id":"gss",
+		"type": "marginallikelihood",
+		"treelikelihood": "posterior",
+		"reference": "refdist",
+		 "steps": 50,
+ 		"distribution": "beta",
+ 		"burnin": 100,
+		"file": "LOG_TEMPLATE"
+	}
+]
+}

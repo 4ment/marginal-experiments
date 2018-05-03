@@ -1,0 +1,10 @@
+{
+"physher":[
+	{
+		"id": "pred",
+		"type": "predictive",
+		"filename": "LOG_TEMPLATE",
+		"burnin": 100
+	}
+]
+}

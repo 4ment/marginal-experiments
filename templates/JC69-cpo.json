@@ -1,0 +1,10 @@
+{
+"physher":[
+	{
+		"id": "cpo",
+		"type": "cpo",
+		"filename": "LOG_TEMPLATE",
+		"burnin": 100
+	}
+]
+}

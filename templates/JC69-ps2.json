@@ -1,0 +1,13 @@
+{
+"physher":[
+	{
+		"id": "margl",
+		"type": "marginallikelihood",
+		"file":"LOG_TEMPLATE",
+		"burnin": 100,
+ 		"distribution": "beta",
+ 		"steps": 50,
+ 		"algorithm": "ps2"
+	}
+]
+}
