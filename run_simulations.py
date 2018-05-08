@@ -29,8 +29,7 @@ bindir = os.path.join(rootdir, 'bin')
 templatedir = os.path.join(rootdir, 'templates')
 datadir = os.path.join(rootdir, 'data')
 
-physher = os.path.join(bindir, 'physher-sse')
-
+physher = 'physher'
 
 pattern_time = re.compile(r'Time: (\d+\.\d+)')
 
