@@ -25,16 +25,13 @@ arg = p.parse_args()
 models = ('JC69',)
 datasets = ('DS1', 'DS2', 'DS3', 'DS3s', 'DS4', 'DS5')
 rootdir = os.getcwd()
-bindir = os.path.join(rootdir, 'bin')
 templatedir = os.path.join(rootdir, 'templates')
 datadir = os.path.join(rootdir, 'data')
+replicates = 10
 
 physher = 'physher'
 
 pattern_time = re.compile(r'Time: (\d+\.\d+)')
-
-# fast methods
-fast = {'map', 'ml', 'vbis', 'vb', 'laplace-gamma', 'laplace-beta', 'laplace-lognormal', 'laplacis', 'nmc'}
 
 
 def convert_trees(dpath, dataset, outputpath):
@@ -233,12 +230,13 @@ analyses = collections.OrderedDict(sorted(analyses2.items(), key=lambda x: 'logf
 
 
 class Worker(Thread):
-    def __init__(self, qq, dataset, datadir, analysis_dir):
+    def __init__(self, qq, dataset, datadir, analysis_dir, rep):
         Thread.__init__(self)
         self.queue = qq
         self.dataset = dataset
         self.analysis_dir = analysis_dir
         self.datadir = datadir
+        self.rep = rep
 
     def run(self):
         while not self.queue.empty():
@@ -291,8 +289,8 @@ class Worker(Thread):
                 results = analyses[analysis]['parser'](outfile)
                 lock.acquire()
                 print(results)
-                result_file.write(str(index) + '\t' + results['method'] + '\t' + results['LL'] + '\t' + results['time'] + '\n')
-                master_file.write(str(index) + '\t' + results['method'] + '\t' + results['LL'] + '\t' + results['time'] + '\n')
+                result_file.write(str(rep) + '\t' + str(index) + '\t' + results['method'] + '\t' + results['LL'] + '\t' + results['time'] + '\n')
+                master_file.write(str(rep) + '\t' + str(index) + '\t' + results['method'] + '\t' + results['LL'] + '\t' + results['time'] + '\n')
                 lock.release()
             else:
                 lock.acquire()
@@ -300,70 +298,74 @@ class Worker(Thread):
                     for line in fp:
                         pass
                     time = line.rstrip('\n').rstrip('\r').split(' ')[1]
-                    result_file.write(str(index) + '\t' + analysis + '\tNA\t' + time + '\n')
-                    master_file.write(str(index) + '\t' + analysis + '\tNA\t' + time + '\n')
+                    result_file.write(str(rep) + '\t' + str(index) + '\t' + analysis + '\tNA\t' + time + '\n')
+                    master_file.write(str(rep) + '\t' + str(index) + '\t' + analysis + '\tNA\t' + time + '\n')
                 lock.release()
 
             self.queue.task_done()
 
 
+
+master_file = open(os.path.join(rootdir, results) + '.csv', 'w')
+master_file.write('rep\ttree\talgorithm\tmarginal\ttime\n')
+    
 for dataset in datasets:
     dataset_dir = os.path.join(rootdir, dataset)
 
     if not os.path.lexists(dataset_dir):
         os.mkdir(dataset_dir)
 
-    # Save trees in dataset folder and create SRF file
+	# Save trees in dataset folder and create SRF file
     convert_trees(datadir, dataset, dataset_dir)
 
-    master_file = open(os.path.join(dataset_dir, dataset) + '.csv', 'w')
-    master_file.write('tree\talgorithm\tmarginal\ttime\n')
+    for rep in range(replicates):
+        rep_dir = os.path.join(dataset_dir, str(rep))
+        if not os.path.lexists(rep_dir):
+		    os.mkdir(rep_dir)
 
-    for model in models:
+        for model in models:
 
-        for analysis in analyses:
-            print(analysis)
-            start = timer()
-            analysis_dir = os.path.join(dataset_dir, analysis)
-            if not os.path.lexists(analysis_dir):
-                os.mkdir(analysis_dir)
+            for analysis in analyses:
+                print(analysis)
+                start = timer()
+                analysis_dir = os.path.join(rep_dir, analysis)
+                if not os.path.lexists(analysis_dir):
+                    os.mkdir(analysis_dir)
 
-            lock = Lock()
+                lock = Lock()
 
-            result_file = open(os.path.join(analysis_dir, 'data.csv'), 'w')
+                result_file = open(os.path.join(analysis_dir, 'data.csv'), 'w')
 
-            result_file.write('tree\talgorithm\tmarginal\ttime\n')
+                result_file.write('rep\ttree\talgorithm\tmarginal\ttime\n')
 
-            # read template (e.g JC69-mcmc.json)
-            with open(os.path.join(templatedir, model + '-' + analysis + '.json'), 'r') as f:
-                json_template = f.read()
+                # read template (e.g JC69-mcmc.json)
+                with open(os.path.join(templatedir, model + '-' + analysis + '.json'), 'r') as f:
+                    json_template = f.read()
 
-            qq = queue.Queue()
+                qq = queue.Queue()
 
-            maximum = float('inf')
-            if dataset == 'DS5':
-                maximum = 1000
-                if analysis in fast:
-                    maximum = 10000
+                maximum = float('inf')
+                if dataset == 'DS5':
+                    maximum = 1000
 
-            total = 0
-            with open(os.path.join(dataset_dir, dataset + '.trees'), 'r') as f:
-                for i, l in enumerate(f):
-                    qq.put(i)
-                    total += 1
-                    if total == maximum:
-                        break
+                total = 0
+                with open(os.path.join(dataset_dir, dataset + '.trees'), 'r') as f:
+                    for i, l in enumerate(f):
+                        qq.put(i)
+                        total += 1
+                        if total == maximum:
+                            break
 
-            for _ in range(min(total, arg.threads)):
-                worker = Worker(qq, dataset, datadir, analysis_dir)
-                worker.daemon = True
-                worker.start()
+                for _ in range(min(total, arg.threads)):
+                    worker = Worker(qq, dataset, datadir, analysis_dir, rep)
+                    worker.daemon = True
+                    worker.start()
 
-            qq.join()
+                qq.join()
 
-            end = timer()
-            total_time = end - start
-            print('Time: {}'.format(total_time))
+                end = timer()
+                total_time = end - start
+                print('Time: {}'.format(total_time))
 
-            result_file.close()
-    master_file.close()
+                result_file.close()
+master_file.close()
