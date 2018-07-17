@@ -1,15 +1,19 @@
 FROM debian:stretch
 
-RUN apt-get install -y --no-install-recommends \
+LABEL maintainer="Mathieu Fourment"
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+	build-essential \
 	ca-certificates \
 	cmake \
-	git \
 	libgsl0-dev \
-	python2.7
+	python2.7 \
+	unzip \
+	wget
 	
-RUN git clone https://github.com/4ment/physher.git
-WORKDIR /physher/Release
-RUN git checkout listener
+RUN wget https://github.com/4ment/physher/archive/marginal-v1.0.zip && unzip marginal-v1.0.zip
+WORKDIR /physher-marginal-v1.0/Release
 RUN cmake -DBUILD_SHARED_LIBS=OFF .. && make && make install
+WORKDIR /data
 
 ENTRYPOINT ["python2.7", "run_simulations.py"]
