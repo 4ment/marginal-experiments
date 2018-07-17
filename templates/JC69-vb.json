@@ -1,7 +1,4 @@
 {
-"init":{
-	"seed": "SEED"
-},
 "model":{
 	"id":"posterior",
 	"type" : "compound",
@@ -97,8 +94,7 @@
 		"eta": [ 0.1],
 		"model": "&var",
 		"parameters": ["%var_tree.distances"],
-		"max": 1000000,
-		"elbosamples": 100000
+		"max": 1000000
 	}
 ]
 }
