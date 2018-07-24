@@ -59,27 +59,28 @@
 },
 "physher":[
 	{
-		"id":"mlopt",
+		"id":"metaopt",
 		"type":"optimizer",
 		"algorithm":"meta",
 		"precision":0.001,
 		"max": 10000,
 		"min": 1,
-		"model":"&treelikelihood",
+		"model":"&posterior",
 		"list":[
 			{				
 				"id":"optbl",
 				"type":"optimizer",
 				"algorithm":"serial",
-				"model":"&treelikelihood",
-				"treelikelihood": "&treelikelihood"
+				"model":"&posterior",
+				"treelikelihood": "&treelikelihood",
+				"precision":0.00000001
 			}
 		]
 	},
 	{
-		"id": "log1",
+		"id": "log",
 		"type": "logger",
-		"models": "&treelikelihood"
+		"models": ["&posterior","&treelikelihood"]
 	},
 	{
 		"id":"laplaceG",
