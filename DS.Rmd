@@ -91,7 +91,7 @@ read.ds <- function(dataset){
   
   # KL
   df.kl = dfff %>% full_join(srf, by='tree') %>% group_by(rep, algorithm) %>%
-    summarize(KL=kl.log.pq(marginal, SRF, TRUE), H=h.log.pq(marginal, SRF, TRUE)) %>%
+    summarize(KL=kl.log.pq(SRF, marginal, TRUE), H=h.log.pq(SRF, marginal, TRUE)) %>%
     arrange(algorithm) %>% mutate(dataset=dataset)
 
   # plot
