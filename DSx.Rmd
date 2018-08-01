@@ -1,0 +1,54 @@
+
+\newpage
+
+# DS{{i}}
+## Mean time
+```{r}
+filename = paste('DS',{{i}},sep="")
+df = read.ds(filename)
+df.time = df[['time']]
+kable(df.time[order(df.time$median),])
+```
+
+\newpage
+
+## Ranking of KL divergences for 10 replicates
+```{r}
+ranking = df[['kl']] %>% group_by(rep) %>% mutate(rank=rank(KL)) %>%
+  select(-c(KL, H, dataset)) %>% spread(rep, rank)
+kable(ranking[order(ranking$`1`),])
+```
+
+\newpage
+
+## KL divergences for 10 replicates
+```{r}
+kl = df[['kl']] %>% select(-c(H, dataset)) %>%  spread(rep, KL)
+kable(kl[order(kl$`1`),])
+```
+
+\newpage
+
+## Marginals vs. SRF of replicate 1
+```{r fig.height=9, fig.width=10}
+df.plot = df[['plot']] %>% filter(rep==1) %>% ungroup() %>% select(-rep)
+ggplot(df.plot, aes(x=SRF, y=marginal)) +
+  facet_wrap( ~algorithm, scales = "free_y", ncol=2) +
+  geom_point()
+```
+
+\newpage
+
+## Standard error using 10 replicates
+```{r}
+margs = df[['marginals']] %>% group_by(tree, algorithm) %>%
+  summarize(SE=sd(marginal), mean=mean(marginal),CV=sd(marginal)/mean(marginal)) %>%
+  filter(SE!=0) %>% as.data.frame
+
+ myorder = margs %>% group_by(algorithm) %>% summarize(meanSE=mean(SE)) %>% as.data.frame
+ margs$Method = factor(margs$algorithm, levels=myorder$algorithm[order(myorder$meanSE,decreasing=F)])
+
+ ggplot(margs, aes( x=Method, y=SE)) +
+   geom_boxplot() +
+   scale_y_log10()
+```

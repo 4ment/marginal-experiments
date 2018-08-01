@@ -46,35 +46,32 @@ log.sum.exp<- function(x) {
   log(sum(exp(x - offset))) + offset
 }
 
-kl.log.pq <- function(P,Q){
+kl.log.pq <- function(P,Q, normalize=FALSE){
+  if(normalize){
+    Q = Q - log.sum.exp(Q)
+    P = P - log.sum.exp(P)
+  }
   sum(exp(P)*(P-Q))
 }
 
-h.log.pq <-function(P, Q){
-  sqrt(sum( (sqrt(exp(P)) - sqrt(exp(Q)))^2 ))/sqrt(2)
-}
-
-calc.kl.h <- function(df, srf){
-  logpp = srf - log.sum.exp(srf) # sum(exp(df$pp)) != 1 so normalize too
-  df2 = data.frame(matrix(nrow=ncol(df), ncol=2))
-  rownames(df2) = colnames(df)
-  colnames(df2) = c('KL', 'Hellinger')
-  for(i in 1:ncol(df)){
-    logprob = df[,i] - log.sum.exp(df[,i])
-    df2[i,] = c(kl.log.pq(logpp, logprob), h.log.pq(logpp, logprob))
+h.log.pq <-function(P, Q, normalize=FALSE){
+  if(normalize){
+    Q = log.sum.exp(Q)
+    P = log.sum.exp(P)
   }
-  df2
+  sqrt(sum( (sqrt(exp(P)) - sqrt(exp(Q)))^2 ))/sqrt(2)
 }
 
 read.ds <- function(dataset){
   df = read.csv(file.path(dataset, paste(dataset, ".csv", sep="")), sep='\t')
   srf = read.csv(file.path(dataset, "data.csv"), sep='\t')
   srf = srf %>% mutate(SRF=log(SRF))
+  df = mutate(df, rep=rep+1)
 
   dfff = df %>% filter(algorithm %in% c('mcmc', 'mmcmc', 'mmcmc-gss'))%>%
     spread(algorithm,time) %>% select(-marginal)
   df = filter(df, !(algorithm %in% c('mcmc', 'mmcmc', 'mmcmc-gss')))
-  dfff = dfff %>% right_join(df, by='tree')
+  dfff = dfff %>% right_join(df, by=c('rep','tree'))
   #MMCMC
   for(m in c('SS', 'PS', 'PS2')){
     dfff[dfff$algorithm==m,]$time  = dfff[dfff$algorithm==m,]$time + 
@@ -89,261 +86,73 @@ read.ds <- function(dataset){
     dfff[dfff$algorithm=='GSS',]$`mmcmc-gss`
   
   df.time = dfff %>% group_by(algorithm) %>% 
-    summarise(median=median(time),mean=mean(time), sd=sd(time), cv=sd(time)/mean(time))
+    summarise(median=median(time),mean=mean(time), sd=sd(time), cv=sd(time)/mean(time)) %>%
+    arrange(algorithm)
   
   # KL
-  dd = dfff %>% select(tree, marginal, algorithm)  %>% spread(algorithm, marginal) %>%
-    full_join(srf, by='tree') %>% arrange(tree) %>% select(-tree)
-  
-  if(sum(complete.cases(dd)) != nrow(dd)){
-    #dd = dd[complete.cases(dd),]
-    dd = dd[1:1000,]
-  }
-  df.kl = calc.kl.h(select(dd,-SRF), select(dd,SRF))
+  df.kl = dfff %>% full_join(srf, by='tree') %>% group_by(rep, algorithm) %>%
+    summarize(KL=kl.log.pq(marginal, SRF, TRUE), H=h.log.pq(marginal, SRF, TRUE)) %>%
+    arrange(algorithm) %>% mutate(dataset=dataset)
 
   # plot
+  myorder = df.kl %>% filter(rep==1) %>% arrange(KL) %>% ungroup() %>%
+    select(algorithm) %>% unlist(use.names = FALSE) %>% as.vector
+  
   df.plot = dfff %>% full_join(srf, by='tree') %>% 
-    mutate(algorithm=factor(algorithm, levels=rownames(df.kl[order(df.kl$KL),])))
+    mutate(algorithm=factor(algorithm, levels=myorder))
 
-  list(time=df.time, kl=df.kl, plot=df.plot)
+  list(time=df.time, kl=df.kl, plot=df.plot, marginals=dfff)
 }
 ```
 
-```{r}
-#load("DS.RData")
-
-DS1 = read.ds('DS1')
-DS2 = read.ds('DS2')
-DS3 = read.ds('DS3')
-DS3s = read.ds('DS3s')
-DS4 = read.ds('DS4')
-DS5 = read.ds('DS5')
-
-save(DS1, DS2, DS3, DS3s, DS4, DS5, file="DS.RData")
+```{r include=FALSE}
+datasets = paste0('DS', 1:5)
+out = NULL
+for(i in 1:length(datasets)){
+  out = c(out, knit_expand('DSx.Rmd'))
+}
 ```
 
-\newpage
-
-# DS1
-```{r}
-df1.time = DS1[['time']]
-kable(df1.time[order(df1.time$median),])
-```
-
-\newpage
-
-```{r}
-df1.kl = DS1[['kl']]
-kable(df1.kl[order(df1.kl$KL),])
-```
-
-\newpage
-
-```{r fig.height=9, fig.width=10}
-df.plot = DS1[['plot']]
-ggplot(df.plot, aes(x=SRF, y=marginal)) +
-  facet_wrap( ~algorithm, scales = "free_y", ncol=2) +
-  geom_point()
-```
-
-\newpage
-
-# DS2
-```{r}
-df2.time = DS2[['time']]
-kable(df2.time[order(df2.time$median),])
-```
-
-\newpage
-
-```{r}
-df2.kl = DS2[['kl']]
-kable(df2.kl[order(df2.kl$KL),])
-```
-
-\newpage
-
-```{r fig.height=9, fig.width=10}
-df.plot = DS2[['plot']]
-ggplot(df.plot, aes(x=SRF, y=marginal)) +
-  facet_wrap( ~algorithm, scales = "free_y", ncol=2) +
-  geom_point()
-```
-
-
-\newpage
-
-# DS3
-```{r}
-df3.time = DS3[['time']]
-kable(df3.time[order(df3.time$median),])
-```
-
-\newpage
-
-```{r}
-df3.kl = DS3[['kl']]
-kable(df3.kl[order(df3.kl$KL),])
-```
-
-\newpage
-
-```{r fig.height=9, fig.width=10}
-df.plot = DS3[['plot']]
-ggplot(df.plot, aes(x=SRF, y=marginal)) +
-  facet_wrap( ~algorithm, scales = "free_y", ncol=2) +
-  geom_point()
-```
-
-
-\newpage
-
-# DS3 simulated
-```{r}
-df.time = DS3s[['time']]
-kable(df.time[order(df.time$median),])
-```
-
-\newpage
-
-```{r}
-df3s.kl = DS3s[['kl']]
-kable(df3s.kl[order(df3s.kl$KL),])
-```
-
-\newpage
-
-```{r fig.height=9, fig.width=10}
-df.plot = DS3s[['plot']]
-ggplot(df.plot, aes(x=SRF, y=marginal)) +
-  facet_wrap( ~algorithm, scales = "free_y", ncol=2) +
-  geom_point()
-```
-
-\newpage
-
-# DS4
-```{r}
-df4.time = DS4[['time']]
-kable(df4.time[order(df4.time$median),])
-```
-
-\newpage
-
-```{r}
-df4.kl = DS4[['kl']]
-kable(df4.kl[order(df4.kl$KL),])
-```
-
-\newpage
-
-```{r fig.height=9, fig.width=10}
-df.plot = DS4[['plot']]
-ggplot(df.plot, aes(x=SRF, y=marginal)) +
-  facet_wrap( ~algorithm, scales = "free_y", ncol=2) +
-  geom_point()
-```
-
-\newpage
-
-# DS5
-```{r}
-df5.time = DS5[['time']]
-kable(df5.time[order(df5.time$median),])
-```
-
-\newpage
-## KL with 1000 trees
-```{r}
-df5.kl = DS5[['kl']]
-kable(df5.kl[order(df5.kl$KL),])
-```
-
-\newpage
-
-## Plot with 1,000 trees
-```{r fig.height=9, fig.width=10}
-df.plot = DS5[['plot']] %>% filter(tree < 1000)
-ggplot(df.plot, aes(x=SRF, y=marginal)) +
-  facet_wrap( ~algorithm, scales = "free_y", ncol=2) +
-  geom_point()
-```
-
-
-\newpage
-
-## Plot with 10,000 trees (no MCMC based methods)
-```{r fig.height=9, fig.width=10}
-df.plot = DS5[['plot']]
-nomcmc = as.vector(unique(df.plot[df.plot$tree > 1000,]$algorithm))
-df.plot = df.plot %>% filter(algorithm %in% nomcmc)
-ggplot(df.plot, aes(x=SRF, y=marginal)) +
-  facet_wrap( ~algorithm, scales = "free_y", ncol=2) +
-  geom_point()
-```
-
-\newpage
-
-```{r eval=FALSE, echo=FALSE}
-knitr::kable(list(df1.kl[order(df1.kl$KL), "KL", drop=FALSE],
-                  df2.kl[order(df2.kl$KL), "KL", drop=FALSE],
-                  df3.kl[order(df3.kl$KL), "KL", drop=FALSE],
-                  df3s.kl[order(df3s.kl$KL), "KL", drop=FALSE],
-                  df4.kl[order(df4.kl$KL), "KL", drop=FALSE]), booktabs = T)# %>% kable_styling(latex_options = c("striped", "scale_down"))
-```
-
-# Every dataset together
-```{r}
-knitr::kable(cbind(tibble::rownames_to_column(df1.kl[order(df1.kl$KL), "KL", drop=FALSE], 'DS1'),
-                  tibble::rownames_to_column(df2.kl[order(df2.kl$KL), "KL", drop=FALSE], 'DS2'),
-                  tibble::rownames_to_column(df3.kl[order(df3.kl$KL), "KL", drop=FALSE], 'DS3'),
-                  tibble::rownames_to_column(df3s.kl[order(df3s.kl$KL), "KL", drop=FALSE], 'DS3s'),
-                  tibble::rownames_to_column(df4.kl[order(df4.kl$KL), "KL", drop=FALSE], 'DS4'),
-                  tibble::rownames_to_column(df4.kl[order(df4.kl$KL), "KL", drop=FALSE], 'DS5')),
-             booktabs = T)
-```
+`r paste(knit(text = out), collapse = '\n')`
 
 \newpage
 
 ## Method vs. KL (log scale)
-```{r}
-all.kl = as.data.frame(cbind(df1.kl$KL,df2.kl$KL,df3.kl$KL,df4.kl$KL,df5.kl$KL))
-myorder = rowMeans(all.kl)
-myorder = apply(all.kl, 1, median)
-all.kl = log(all.kl)
-all.kl = cbind(rownames(df1.kl), all.kl)
-colnames(all.kl) = c("Method", "DS1", "DS2", "DS3", "DS4", "DS5")
-all.kl2 = gather(all.kl, Dataset, KL, DS1:DS5)
-all.kl2$Method = factor(all.kl2$Method, levels=rownames(df1.kl)[order(myorder,decreasing=T)])
-ggplot(all.kl2, aes(x=Method)) + geom_point(aes(y=KL,col=Dataset)) +
-  theme(axis.text.x = element_text(angle = 30, hjust = 1))
+```{r method-kl}
+all.kl = read.ds(datasets[1])[['kl']]
+for(i in 2:length(datasets)){
+  kl = read.ds(datasets[i])
+  all.kl = rbind(all.kl, kl[['kl']])
+}
+
+all.kl = all.kl %>% filter(rep==1) %>% select(-rep)
+myorder = all.kl %>% group_by(algorithm) %>% summarize(medianKL=median(KL)) %>%
+  arrange(-medianKL) %>% select(algorithm) %>% unlist(use.names = FALSE) %>% as.vector
+
+all.kl$Method = factor(all.kl$algorithm, levels=myorder)
+ggplot(all.kl, aes(x=Method)) + geom_point(aes(y=KL,col=dataset)) +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1)) +
+  scale_y_log10() 
 ```
 
 \newpage
 
 ## Method against running time (log scale)
-```{r}
-all.time = as.data.frame(cbind(df1.time$median, df2.time$median, df3.time$median, df4.time$median,df5.time$median))
+```{r method-time}
+ds1 = read.ds(datasets[1])
+all.time = as.data.frame(ds1[['time']]$median)
+for(i in 2:length(datasets)){
+  ds.time = read.ds(datasets[i])
+  all.time = cbind(all.time, ds.time[['time']]$median)
+}
+
 myorder = rowMeans(all.time)
 myorder = apply(all.time, 1, median)
 all.time = log(all.time)
-all.time = cbind(df1.time$algorithm, all.time)
-colnames(all.time) = c("Method", "DS1", "DS2", "DS3", "DS4", "DS5")
-all.time2 = gather(all.time, Dataset, Time, DS1:DS5)
+all.time = cbind(ds1[['time']]$algorithm, all.time)
+colnames(all.time) = c("Method", "DS1", "DS2")#, "DS3", "DS4", "DS5")
+all.time2 = gather(all.time, Dataset, Time, DS1:DS2)
 all.time2$Method = factor(all.time2$Method, levels=all.time$Method[order(myorder,decreasing=T)])
 ggplot(all.time2, aes(x=Method)) + geom_point(aes(y=Time,col=Dataset)) +
   theme(axis.text.x = element_text(angle = 30, hjust = 1))
 ```
-
-\newpage
-
-## Method against running time*KL (log scale)
-```{r}
-all = all.kl2 %>%  full_join(all.time2, by=c("Method", 'Dataset'))
-all$ratio = all$KL+all$Time
-myorder = all %>% group_by(Method) %>% summarize(avg=median(ratio)) %>% select(avg)
-all$Method = factor(all$Method, levels=all$Method[order(myorder$avg,decreasing=T)])
-ggplot(all, aes(x=Method)) + geom_point(aes(y=ratio,col=Dataset)) +
-  theme(axis.text.x = element_text(angle = 30, hjust = 1))
-```
-
