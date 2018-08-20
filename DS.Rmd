@@ -2,6 +2,7 @@
 title: "DS[1,2,3,3s,4,5]"
 date: '`r format(Sys.time(), "%d %B, %Y")`'
 output: pdf_document
+toc: true
 ---
 
 ```{r setup, include=FALSE}
@@ -13,6 +14,9 @@ library(dplyr)
 library(kableExtra)
 knitr::opts_chunk$set(echo = TRUE, fig.path='Figs/')
 ```
+\newpage
+
+# The dubious methods
 
 - SRF: posterior distribution cacluated with golden runs
 - NMC: naive Monte Carlo with 10,000 samples
@@ -103,10 +107,11 @@ read.ds <- function(dataset){
 
   list(time=df.time, kl=df.kl, plot=df.plot, marginals=dfff)
 }
+
+datasets = paste0('DS', 1:5)
 ```
 
 ```{r include=FALSE}
-datasets = paste0('DS', 1:5)
 out = NULL
 for(i in 1:length(datasets)){
   out = c(out, knit_expand('DSx.Rmd'))
@@ -116,6 +121,8 @@ for(i in 1:length(datasets)){
 `r paste(knit(text = out), collapse = '\n')`
 
 \newpage
+
+# DS1 to DS5 together
 
 ## Method vs. KL (log scale)
 ```{r method-kl}
@@ -137,6 +144,29 @@ ggplot(all.kl, aes(x=Method)) + geom_point(aes(y=KL,col=dataset)) +
 
 \newpage
 
+## KL of 10 replicates
+```{r method-kl-all}
+all.kl = read.ds(datasets[1])[['kl']]
+for(i in 2:length(datasets)){
+  kl = read.ds(datasets[i])
+  all.kl = rbind(all.kl, kl[['kl']])
+}
+
+all.kl$rep = factor(all.kl$rep, levels=unique(all.kl$rep))
+
+myorder = all.kl %>% group_by(algorithm) %>% summarize(medianKL=median(KL)) %>%
+  arrange(-medianKL) %>% select(algorithm) %>% unlist(use.names = FALSE) %>% as.vector
+
+all.kl$Method = factor(all.kl$algorithm, levels=myorder)
+ggplot(all.kl, aes(x=Method, y=KL,col=dataset)) +
+  geom_point() +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1)) +
+  geom_jitter(width = 0.3, size=1) +
+  scale_y_log10()
+```
+
+\newpage
+
 ## Method against running time (log scale)
 ```{r method-time}
 ds1 = read.ds(datasets[1])
@@ -150,8 +180,8 @@ myorder = rowMeans(all.time)
 myorder = apply(all.time, 1, median)
 all.time = log(all.time)
 all.time = cbind(ds1[['time']]$algorithm, all.time)
-colnames(all.time) = c("Method", "DS1", "DS2")#, "DS3", "DS4", "DS5")
-all.time2 = gather(all.time, Dataset, Time, DS1:DS2)
+colnames(all.time) = c("Method", datasets)
+all.time2 = gather(all.time, Dataset, Time, -Method)
 all.time2$Method = factor(all.time2$Method, levels=all.time$Method[order(myorder,decreasing=T)])
 ggplot(all.time2, aes(x=Method)) + geom_point(aes(y=Time,col=Dataset)) +
   theme(axis.text.x = element_text(angle = 30, hjust = 1))

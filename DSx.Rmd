@@ -12,7 +12,7 @@ kable(df.time[order(df.time$median),])
 
 \newpage
 
-## Ranking of KL divergences for 10 replicates
+## Table: ranking of KL divergences for 10 replicates
 ```{r}
 ranking = df[['kl']] %>% group_by(rep) %>% mutate(rank=rank(KL)) %>%
   select(-c(KL, H, dataset)) %>% spread(rep, rank)
@@ -21,7 +21,7 @@ kable(ranking[order(ranking$`1`),])
 
 \newpage
 
-## KL divergences for 10 replicates
+## Table: KL divergences for 10 replicates
 ```{r}
 kl = df[['kl']] %>% select(-c(H, dataset)) %>%  spread(rep, KL)
 kable(kl[order(kl$`1`),])
@@ -51,4 +51,18 @@ margs = df[['marginals']] %>% group_by(tree, algorithm) %>%
  ggplot(margs, aes( x=Method, y=SE)) +
    geom_boxplot() +
    scale_y_log10()
+```
+
+\newpage
+
+## KL of 10 replicates
+```{r}
+all.kl = df[['kl']]
+myorder = all.kl %>% group_by(algorithm) %>% summarize(medianKL=median(KL)) %>%
+  arrange(medianKL) %>% select(algorithm) %>% unlist(use.names = FALSE) %>% as.vector
+
+all.kl$Method = factor(all.kl$algorithm, levels=myorder)
+ggplot(all.kl, aes(x=Method)) + geom_point(aes(y=KL,col=rep)) +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1)) +
+  scale_y_log10()
 ```
