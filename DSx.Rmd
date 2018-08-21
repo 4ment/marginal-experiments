@@ -21,6 +21,28 @@ kable(ranking[order(ranking$`1`),])
 
 \newpage
 
+## Table: ranking of KL divergences for 10 replicates
+```{r}
+ranking = df[['kl']] %>% group_by(rep) %>% mutate(rank=rank(KL)) %>%
+  select(-c(KL, H, dataset))
+maxrep = max(ranking$rep)
+myorder = ranking %>% filter(rep==maxrep) %>% arrange(rank) %>% ungroup() %>% select(algorithm)
+ranking$algorithm = factor(ranking$algorithm, levels=myorder$algorithm)
+
+right_label <- levels(ranking$algorithm)
+
+ggplot(ranking, aes(x=rep, y=rank, col=algorithm)) +
+  geom_line() +
+  scale_y_reverse() + 
+  geom_text(
+    data = subset(ranking, rep == maxrep),
+    aes(label = algorithm), hjust=-0.1, size=2) +
+  theme(legend.position="none") +
+  labs(x="Replicate", y="Ranking")
+```
+
+\newpage
+
 ## Table: KL divergences for 10 replicates
 ```{r}
 kl = df[['kl']] %>% select(-c(H, dataset)) %>%  spread(rep, KL)
@@ -31,7 +53,7 @@ kable(kl[order(kl$`1`),])
 
 ## Marginals vs. SRF of replicate 1
 ```{r fig.height=9, fig.width=10}
-df.plot = df[['plot']] %>% filter(rep==1) %>% ungroup() %>% select(-rep)
+df.plot = df[['plot']] %>% filter(rep==5) %>% ungroup() %>% select(-rep)
 ggplot(df.plot, aes(x=SRF, y=marginal)) +
   facet_wrap( ~algorithm, scales = "free_y", ncol=2) +
   geom_point()
@@ -62,6 +84,7 @@ myorder = all.kl %>% group_by(algorithm) %>% summarize(medianKL=median(KL)) %>%
   arrange(medianKL) %>% select(algorithm) %>% unlist(use.names = FALSE) %>% as.vector
 
 all.kl$Method = factor(all.kl$algorithm, levels=myorder)
+all.kl$rep = factor(all.kl$rep, levels=unique(all.kl$rep))
 ggplot(all.kl, aes(x=Method)) + geom_point(aes(y=KL,col=rep)) +
   theme(axis.text.x = element_text(angle = 30, hjust = 1)) +
   scale_y_log10()

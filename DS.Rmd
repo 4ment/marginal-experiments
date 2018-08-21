@@ -137,6 +137,7 @@ myorder = all.kl %>% group_by(algorithm) %>% summarize(medianKL=median(KL)) %>%
   arrange(-medianKL) %>% select(algorithm) %>% unlist(use.names = FALSE) %>% as.vector
 
 all.kl$Method = factor(all.kl$algorithm, levels=myorder)
+all.kl$rep = factor(all.kl$rep, levels=unique(all.kl$rep))
 ggplot(all.kl, aes(x=Method)) + geom_point(aes(y=KL,col=dataset)) +
   theme(axis.text.x = element_text(angle = 30, hjust = 1)) +
   scale_y_log10() 
@@ -153,7 +154,7 @@ for(i in 2:length(datasets)){
 }
 
 all.kl$rep = factor(all.kl$rep, levels=unique(all.kl$rep))
-
+all.kl = filter(all.kl, !(algorithm %in% c('ML', 'MAP', 'GL', 'LL', 'BL')))
 myorder = all.kl %>% group_by(algorithm) %>% summarize(medianKL=median(KL)) %>%
   arrange(-medianKL) %>% select(algorithm) %>% unlist(use.names = FALSE) %>% as.vector
 
