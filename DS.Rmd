@@ -12,6 +12,7 @@ library(knitr)
 library(tidyr)
 library(dplyr)
 library(kableExtra)
+library(ape)
 knitr::opts_chunk$set(echo = TRUE, fig.path='Figs/')
 ```
 \newpage
@@ -60,14 +61,42 @@ kl.log.pq <- function(P,Q, normalize=FALSE){
 
 h.log.pq <-function(P, Q, normalize=FALSE){
   if(normalize){
-    Q = log.sum.exp(Q)
-    P = log.sum.exp(P)
+    Q = Q - log.sum.exp(Q)
+    P = P - log.sum.exp(P)
   }
   sqrt(sum( (sqrt(exp(P)) - sqrt(exp(Q)))^2 ))/sqrt(2)
 }
 
-read.ds <- function(dataset){
+rmsd <- function(tree, P, Q, ptrees, pp){
+  Q = Q - log.sum.exp(Q)
+  P = P - log.sum.exp(P)
+  
+  Q = exp(Q[order(tree)])
+  P = exp(P[order(tree)])
+  
+  msd = 0
+  for(i in 1:length(pp)){
+    msdi = 0
+    for(j in 1:length(ptrees)){
+      if(list(pp[[i]]) %in% ptrees[[j]]){
+        msdi = msdi + Q[j] - P[j]
+      }
+    }
+    msd = msd + msdi*msdi
+  }
+  sqrt(msd/length(pp))
+}
+
+read.ds <- function(dataset, force=F){
+  #trees.file  = file.path('data', paste0(dataset, ".trees", sep=""))
+  trees.file = paste0('/Users/mathieu/Desktop/marginal-experiments/data/JC_no_gamma_credible_set_ds', substr(dataset, nchar(dataset), nchar(dataset)))
+  if(file.exists(paste0(dataset, '.Rdata')) & force!=T){
+    load(paste0(dataset, '.Rdata'))
+    return(res)
+  }
+  
   df = read.csv(file.path(dataset, paste(dataset, ".csv", sep="")), sep='\t')
+  
   srf = read.csv(file.path(dataset, "data.csv"), sep='\t')
   srf = srf %>% mutate(SRF=log(SRF))
   df = mutate(df, rep=rep+1)
@@ -97,6 +126,18 @@ read.ds <- function(dataset){
   df.kl = dfff %>% full_join(srf, by='tree') %>% group_by(rep, algorithm) %>%
     summarize(KL=kl.log.pq(SRF, marginal, TRUE), H=h.log.pq(SRF, marginal, TRUE)) %>%
     arrange(algorithm) %>% mutate(dataset=dataset)
+  
+  #RMSD
+  trees = read.tree(trees.file, keep.multi =TRUE)
+  ptrees = list()
+  for(i in seq_along(trees)){
+    ptrees[[i]] = prop.part(trees[[i]])
+  }
+  pp=prop.part(trees)
+  
+  df.rmsd = dfff %>% full_join(srf, by='tree') %>% group_by(rep, algorithm) %>%
+    summarize(RMSD=rmsd(tree, SRF, marginal, ptrees, pp)) %>%
+    arrange(algorithm) %>% mutate(dataset=dataset)
 
   # plot
   myorder = df.kl %>% filter(rep==1) %>% arrange(KL) %>% ungroup() %>%
@@ -105,13 +146,15 @@ read.ds <- function(dataset){
   df.plot = dfff %>% full_join(srf, by='tree') %>% 
     mutate(algorithm=factor(algorithm, levels=myorder))
 
-  list(time=df.time, kl=df.kl, plot=df.plot, marginals=dfff)
+  res = list(time=df.time, kl=df.kl, plot=df.plot, marginals=dfff,rmsd=df.rmsd)
+  save(res, file=paste0(dataset, '.Rdata'))
+  res
 }
 
 datasets = paste0('DS', 1:5)
 ```
 
-```{r include=FALSE}
+```{r, include=FALSE}
 out = NULL
 for(i in 1:length(datasets)){
   out = c(out, knit_expand('DSx.Rmd'))
@@ -124,44 +167,57 @@ for(i in 1:length(datasets)){
 
 # DS1 to DS5 together
 
-## Method vs. KL (log scale)
-```{r method-kl}
-all.kl = read.ds(datasets[1])[['kl']]
+```{r load-all}
+df = read.ds(datasets[1])
+all.kl = df[['kl']]
+all.rmsd = df[['rmsd']]
+all.time = df[['time']]
 for(i in 2:length(datasets)){
-  kl = read.ds(datasets[i])
-  all.kl = rbind(all.kl, kl[['kl']])
+  df = read.ds(datasets[i])
+  all.kl = rbind(all.kl, df[['kl']])
+  all.rmsd = rbind(all.rmsd, df[['rmsd']])
+  all.time = rbind(all.time, df[['time']])
 }
+```
 
-all.kl = all.kl %>% filter(rep==1) %>% select(-rep)
-myorder = all.kl %>% group_by(algorithm) %>% summarize(medianKL=median(KL)) %>%
-  arrange(-medianKL) %>% select(algorithm) %>% unlist(use.names = FALSE) %>% as.vector
+\newpage
 
-all.kl$Method = factor(all.kl$algorithm, levels=myorder)
-all.kl$rep = factor(all.kl$rep, levels=unique(all.kl$rep))
-ggplot(all.kl, aes(x=Method)) + geom_point(aes(y=KL,col=dataset)) +
-  theme(axis.text.x = element_text(angle = 30, hjust = 1)) +
-  scale_y_log10() 
+## RMSD of 10 replicates
+```{r method-rmsd-all}
+all.rmsd$rep = factor(all.rmsd$rep, levels=unique(all.rmsd$rep))
+all.rmsd.determ = filter(all.rmsd, algorithm %in% c('ML', 'MAP', 'GL', 'LL', 'BL') & rep==1)
+all.rmsd = filter(all.rmsd, !(algorithm %in% c('ML', 'MAP', 'GL', 'LL', 'BL')))
+all.rmsd = rbind(all.rmsd, all.rmsd.determ)
+myorder = all.rmsd %>% group_by(algorithm) %>% summarize(medianRMSD=median(RMSD)) %>%
+  arrange(medianRMSD) %>% select(algorithm) %>% unlist(use.names = FALSE) %>% as.vector
+
+all.rmsd$Method = factor(all.rmsd$algorithm, levels=myorder)
+ggplot(all.rmsd, aes(x=Method, y=RMSD,col=dataset)) +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1), legend.position = c(0.9, 0.2), 
+        legend.title=element_blank(), legend.background=element_blank(),
+        legend.key = element_rect(fill = NA, colour = NA, size = 0.25)) +
+  geom_hline(yintercept = 0.01) +
+  geom_hline(yintercept = 0.05, linetype="dashed") +
+  geom_jitter(width = 0.3, size=1) +
+  scale_y_log10()
 ```
 
 \newpage
 
 ## KL of 10 replicates
 ```{r method-kl-all}
-all.kl = read.ds(datasets[1])[['kl']]
-for(i in 2:length(datasets)){
-  kl = read.ds(datasets[i])
-  all.kl = rbind(all.kl, kl[['kl']])
-}
-
 all.kl$rep = factor(all.kl$rep, levels=unique(all.kl$rep))
+all.kl.determ = filter(all.kl, algorithm %in% c('ML', 'MAP', 'GL', 'LL', 'BL') & rep==1)
 all.kl = filter(all.kl, !(algorithm %in% c('ML', 'MAP', 'GL', 'LL', 'BL')))
+all.kl = rbind(all.kl, all.kl.determ)
 myorder = all.kl %>% group_by(algorithm) %>% summarize(medianKL=median(KL)) %>%
-  arrange(-medianKL) %>% select(algorithm) %>% unlist(use.names = FALSE) %>% as.vector
+  arrange(medianKL) %>% select(algorithm) %>% unlist(use.names = FALSE) %>% as.vector
 
 all.kl$Method = factor(all.kl$algorithm, levels=myorder)
 ggplot(all.kl, aes(x=Method, y=KL,col=dataset)) +
-  geom_point() +
-  theme(axis.text.x = element_text(angle = 30, hjust = 1)) +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1), legend.position = c(0.9, 0.2), 
+        legend.title=element_blank(), legend.background=element_blank(),
+        legend.key = element_rect(fill = NA, colour = NA, size = 0.25)) +
   geom_jitter(width = 0.3, size=1) +
   scale_y_log10()
 ```
@@ -169,7 +225,7 @@ ggplot(all.kl, aes(x=Method, y=KL,col=dataset)) +
 \newpage
 
 ## Method against running time (log scale)
-```{r method-time}
+```{r method-time, eval=FALSE, include=FALSE}
 ds1 = read.ds(datasets[1])
 all.time = as.data.frame(ds1[['time']]$median)
 for(i in 2:length(datasets)){
