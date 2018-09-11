@@ -53,10 +53,37 @@ kable(kl[order(kl$`1`),])
 
 ## Marginals vs. SRF of replicate 1
 ```{r fig.height=9, fig.width=10}
-df.plot = df[['plot']] %>% filter(rep==5) %>% ungroup() %>% select(-rep)
+replicate = 1
+df.plot = df[['plot']] %>% filter(rep==replicate) %>% ungroup() %>% select(-rep)
+temp = df[['kl']] %>% full_join(df[['rmsd']], by=c('rep', 'algorithm', 'dataset')) %>%
+  filter(rep==1)
+temp = temp[match(levels(df.plot$algorithm),temp$algorithm),]
+
+f = function(.o,.f,.kl,.rmsd) paste0('list(atop(atop(',
+                                     'textstyle(',deparse(.f),'),',
+                                     'textstyle(RMSD == ',round(.rmsd,5),')),',
+                                     'textstyle(KL == ',round(.kl,5),')))')
+
+label_formated= Map(.o=origin, .f=final2, .kl=temp$KL, .rmsd=temp$RMSD, f)
+label_formated = label_formated[match(levels(df.plot$algorithm),names(label_formated))]
+levels(df.plot$algorithm) = unlist(label_formated)
 ggplot(df.plot, aes(x=SRF, y=marginal)) +
-  facet_wrap( ~algorithm, scales = "free_y", ncol=2) +
-  geom_point()
+  theme(aspect.ratio = 1) +
+  facet_wrap( ~algorithm, scales = "free_y", ncol=4,labeller=label_parsed) +
+  geom_point() +
+  labs(y="Log marginal probability", x="Log sample relative frequency")
+```
+
+
+\newpage
+
+## Approximate vs. SRF posteriors of replicate 1
+```{r fig.height=9, fig.width=10}
+ggplot(df.plot, aes(x=SRF, y=Posterior)) +
+  facet_wrap( ~algorithm, scales = "free_y", ncol=4,labeller=label_parsed) +
+  theme(aspect.ratio = 1) +
+  geom_point()+
+  labs(y="Log posterior probability", x="Log sample relative frequency")
 ```
 
 \newpage
@@ -70,9 +97,15 @@ margs = df[['marginals']] %>% group_by(tree, algorithm) %>%
  myorder = margs %>% group_by(algorithm) %>% summarize(meanSE=mean(SE)) %>% as.data.frame
  margs$Method = factor(margs$algorithm, levels=myorder$algorithm[order(myorder$meanSE,decreasing=F)])
 
+ mylabs = unlist(final2[match(levels(margs$Method),origin)])
+
  ggplot(margs, aes( x=Method, y=SE)) +
+   theme(axis.title.x=element_blank(),
+        axis.text.x = element_text(angle = 30, hjust = 1))+
    geom_boxplot() +
-   scale_y_log10()
+   scale_y_log10() +
+   scale_x_discrete(labels=mylabs) +
+   ylab("Standard error (log scale)")
 ```
 
 \newpage

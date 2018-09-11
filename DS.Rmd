@@ -59,6 +59,10 @@ kl.log.pq <- function(P,Q, normalize=FALSE){
   sum(exp(P)*(P-Q))
 }
 
+normalize <- function(P){
+  return(P - log.sum.exp(P))
+}
+
 h.log.pq <-function(P, Q, normalize=FALSE){
   if(normalize){
     Q = Q - log.sum.exp(Q)
@@ -97,6 +101,9 @@ read.ds <- function(dataset, force=F){
   
   df = read.csv(file.path(dataset, paste(dataset, ".csv", sep="")), sep='\t')
   
+  # total time
+  total = sum(df$time)
+
   srf = read.csv(file.path(dataset, "data.csv"), sep='\t')
   srf = srf %>% mutate(SRF=log(SRF))
   df = mutate(df, rep=rep+1)
@@ -112,15 +119,15 @@ read.ds <- function(dataset, force=F){
   }
   #MCMC
   for(m in c('BS', 'CPO', 'LPPD', 'HM', 'SHM')){
-    dfff[dfff$algorithm==m,]$time  = dfff[dfff$algorithm==m,]$time + 
+    dfff[dfff$algorithm==m,]$time  = dfff[dfff$algorithm==m,]$time +
       dfff[dfff$algorithm==m,]$mcmc
   }
   dfff[dfff$algorithm=='GSS',]$time  = dfff[dfff$algorithm=='GSS',]$time +
     dfff[dfff$algorithm=='GSS',]$`mmcmc-gss`
   
-  df.time = dfff %>% group_by(algorithm) %>% 
+  df.time = dfff %>% group_by(algorithm) %>%
     summarise(median=median(time),mean=mean(time), sd=sd(time), cv=sd(time)/mean(time)) %>%
-    arrange(algorithm)
+    arrange(algorithm) %>% mutate(dataset=dataset)
   
   # KL
   df.kl = dfff %>% full_join(srf, by='tree') %>% group_by(rep, algorithm) %>%
@@ -135,6 +142,7 @@ read.ds <- function(dataset, force=F){
   }
   pp=prop.part(trees)
   
+  dfff = dfff %>% group_by(rep, algorithm) %>% mutate(Posterior=normalize(marginal)) %>% ungroup()
   df.rmsd = dfff %>% full_join(srf, by='tree') %>% group_by(rep, algorithm) %>%
     summarize(RMSD=rmsd(tree, SRF, marginal, ptrees, pp)) %>%
     arrange(algorithm) %>% mutate(dataset=dataset)
@@ -143,25 +151,32 @@ read.ds <- function(dataset, force=F){
   myorder = df.kl %>% filter(rep==1) %>% arrange(KL) %>% ungroup() %>%
     select(algorithm) %>% unlist(use.names = FALSE) %>% as.vector
   
-  df.plot = dfff %>% full_join(srf, by='tree') %>% 
+  df.plot = dfff %>% full_join(srf, by='tree') %>%
     mutate(algorithm=factor(algorithm, levels=myorder))
 
-  res = list(time=df.time, kl=df.kl, plot=df.plot, marginals=dfff,rmsd=df.rmsd)
+  res = list(time=df.time, kl=df.kl, plot=df.plot, marginals=dfff,rmsd=df.rmsd,total=total)
   save(res, file=paste0(dataset, '.Rdata'))
   res
 }
 
 datasets = paste0('DS', 1:5)
+
+origin=c('GSS', 'GLIS', 'VBIS', 'BS', 'SS', 'PS', 'PS2', 'LL', 'ML', 'MAP', 'GL',
+                             'ELBO', 'LPPD', 'BL', 'CPO', 'SHM', 'HM', 'NS', 'NMC')
+final=c("GSS", expression("LG"["IS"]), expression("VB"["IS"]), "BS", "SS", "PS", "PSm", "LL", "ML", "MAP", "LG",
+                             "ELBO", "PPD", "LB", "CPO", "SHM", "HM", "NS", "NMC")
+final2=c("GSS", bquote("LG"["IS"]), bquote("VB"["IS"]), "BS", "SS", "PS", "PSm", "LL", "ML", "MAP", "LG",
+                             "ELBO", "PPD", "LB", "CPO", "SHM", "HM", "NS", "NMC")
+
+color_datasets = c(rgb(141,160,203,max=255), rgb(252,141,98,max=255), rgb(102,194,165,max=255),
+                   rgb(225,198,47,max=255),#rgb(175,175,175,max=255),
+                   rgb(204,121,167,max=255))
+shape_datasets <- c(3,17,18,19,4)
+
+theme_set(theme_bw(16) + theme(strip.background = element_blank()))
 ```
 
-```{r, include=FALSE}
-out = NULL
-for(i in 1:length(datasets)){
-  out = c(out, knit_expand('DSx.Rmd'))
-}
-```
 
-`r paste(knit(text = out), collapse = '\n')`
 
 \newpage
 
@@ -169,15 +184,64 @@ for(i in 1:length(datasets)){
 
 ```{r load-all}
 df = read.ds(datasets[1])
-all.kl = df[['kl']]
+df = lapply(df, as.data.frame)
+all.kl = as.data.frame(df[['kl']])
 all.rmsd = df[['rmsd']]
 all.time = df[['time']]
+all.plot = cbind(df[['plot']], dataset=rep('DS1', nrow(df[['plot']])))
+total = df[['total']]
 for(i in 2:length(datasets)){
   df = read.ds(datasets[i])
+  total = total + df[['total']]
+  df = lapply(df, as.data.frame)
   all.kl = rbind(all.kl, df[['kl']])
   all.rmsd = rbind(all.rmsd, df[['rmsd']])
   all.time = rbind(all.time, df[['time']])
+  all.plot = rbind(all.plot, cbind(df[['plot']], dataset=rep(datasets[i], nrow(df[['plot']]))))
 }
+```
+
+
+\newpage
+
+## RMSD vs time
+```{r rmsd-time}
+all.rmsd.time = all.rmsd %>% filter(!(algorithm %in% c('MAP', 'PS', 'PS2', 'BL'))) %>%
+    group_by(algorithm, dataset) %>% summarise(medianRMSD=median(RMSD),meanRMSD=mean(RMSD)) %>% ungroup() %>%
+    left_join(all.time, by=c('dataset','algorithm'))
+all.rmsd.time = all.rmsd.time %>% mutate(d=substr(dataset, 3,3)) %>% mutate(label=paste0(algorithm, d))
+label_formated= Map(.a=as.character(all.rmsd.time$algorithm), .b=all.rmsd.time$d, f = function(.a,.b) bquote(list(.(.a)^.(.b))))
+all.rmsd.time$label2 = sapply(label_formated, deparse)
+
+ggplot(all.rmsd.time, aes(x=mean, y=meanRMSD, col=algorithm,label=label2)) +
+  scale_x_log10()+
+  scale_y_log10() +
+  geom_hline(yintercept = 0.01) +
+  geom_hline(yintercept = 0.05, linetype="dashed") +
+  geom_text(size=3, show.legend = FALSE, parse=TRUE) +
+  xlab("Mean running time in seconds") +
+  ylab("Mean RMSD")
+```
+
+
+\newpage
+
+## KL vs time
+```{r kl-time}
+all.kl.time = all.kl %>% filter(!(algorithm %in% c('MAP', 'PS', 'PS2', 'BL'))) %>%
+    group_by(algorithm, dataset) %>% summarise(medianKL=median(KL),meanKL=mean(KL)) %>% ungroup() %>%
+    left_join(all.time, by=c('dataset','algorithm'))
+all.kl.time = all.kl.time %>% mutate(d=substr(dataset, 3,3)) %>% mutate(label=paste0(algorithm, d))
+label_formated= Map(.a=as.character(all.kl.time$algorithm), .b=all.kl.time$d, f = function(.a,.b) bquote(list(.(.a)^.(.b))))
+all.kl.time$label2 = sapply(label_formated, deparse)
+ggplot(all.kl.time, aes(x=mean, y=meanKL, col=algorithm,label=label2)) +
+  scale_x_log10() +
+  scale_y_log10() +
+  geom_hline(yintercept = 0.01) +
+  geom_hline(yintercept = 0.05, linetype="dashed") +
+  geom_text(size=3, show.legend = FALSE, parse=TRUE) +
+  xlab("Mean running time (seconds) per tree") +
+  ylab("Mean RMSD")
 ```
 
 \newpage
@@ -192,14 +256,21 @@ myorder = all.rmsd %>% group_by(algorithm) %>% summarize(medianRMSD=median(RMSD)
   arrange(medianRMSD) %>% select(algorithm) %>% unlist(use.names = FALSE) %>% as.vector
 
 all.rmsd$Method = factor(all.rmsd$algorithm, levels=myorder)
-ggplot(all.rmsd, aes(x=Method, y=RMSD,col=dataset)) +
-  theme(axis.text.x = element_text(angle = 30, hjust = 1), legend.position = c(0.9, 0.2), 
+legend = final[match(myorder, origin)]
+ggplot(all.rmsd, aes(x=Method, y=RMSD,col=dataset)) +#, shape=dataset)) +
+  theme(legend.position = c(0.9, 0.2),
         legend.title=element_blank(), legend.background=element_blank(),
-        legend.key = element_rect(fill = NA, colour = NA, size = 0.25)) +
+        legend.key = element_rect(fill = NA, colour = NA, size = 0.25),
+        axis.title.x=element_blank(),
+        axis.text.x = element_text(angle = 30, hjust = 1)) +
   geom_hline(yintercept = 0.01) +
   geom_hline(yintercept = 0.05, linetype="dashed") +
   geom_jitter(width = 0.3, size=1) +
-  scale_y_log10()
+  scale_x_discrete(labels=legend) +
+  scale_colour_manual(name="dataset", values=color_datasets) +
+  #scale_shape_manual(name="dataset", values=shape_datasets) +
+  scale_y_log10() +
+  xlab("")
 ```
 
 \newpage
@@ -214,32 +285,26 @@ myorder = all.kl %>% group_by(algorithm) %>% summarize(medianKL=median(KL)) %>%
   arrange(medianKL) %>% select(algorithm) %>% unlist(use.names = FALSE) %>% as.vector
 
 all.kl$Method = factor(all.kl$algorithm, levels=myorder)
-ggplot(all.kl, aes(x=Method, y=KL,col=dataset)) +
-  theme(axis.text.x = element_text(angle = 30, hjust = 1), legend.position = c(0.9, 0.2), 
+legend = final[match(myorder, origin)]
+ggplot(all.kl, aes(x=Method, y=KL,col=dataset)) +#, shape=dataset)) +
+  theme(legend.position = c(0.9, 0.2),
         legend.title=element_blank(), legend.background=element_blank(),
-        legend.key = element_rect(fill = NA, colour = NA, size = 0.25)) +
+        legend.key = element_rect(fill = NA, colour = NA, size = 0.25),
+        axis.title.x=element_blank(),
+        axis.text.x = element_text(angle = 30, hjust = 1)) +
   geom_jitter(width = 0.3, size=1) +
+  scale_x_discrete(labels=legend) +
+  scale_colour_manual(name="dataset", values=color_datasets) +
+  #scale_shape_manual(name="dataset", values=shape_datasets) +
   scale_y_log10()
 ```
 
-\newpage
 
-## Method against running time (log scale)
-```{r method-time, eval=FALSE, include=FALSE}
-ds1 = read.ds(datasets[1])
-all.time = as.data.frame(ds1[['time']]$median)
-for(i in 2:length(datasets)){
-  ds.time = read.ds(datasets[i])
-  all.time = cbind(all.time, ds.time[['time']]$median)
+```{r, include=FALSE}
+out = NULL
+for(i in 1:length(datasets)){
+  out = c(out, knit_expand('DSx.Rmd'))
 }
-
-myorder = rowMeans(all.time)
-myorder = apply(all.time, 1, median)
-all.time = log(all.time)
-all.time = cbind(ds1[['time']]$algorithm, all.time)
-colnames(all.time) = c("Method", datasets)
-all.time2 = gather(all.time, Dataset, Time, -Method)
-all.time2$Method = factor(all.time2$Method, levels=all.time$Method[order(myorder,decreasing=T)])
-ggplot(all.time2, aes(x=Method)) + geom_point(aes(y=Time,col=Dataset)) +
-  theme(axis.text.x = element_text(angle = 30, hjust = 1))
 ```
+
+`r paste(knit(text = out), collapse = '\n')`
