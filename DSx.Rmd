@@ -12,21 +12,13 @@ kable(df.time[order(df.time$median),])
 
 \newpage
 
-## Table: ranking of KL divergences for 10 replicates
-```{r}
-ranking = df[['kl']] %>% group_by(rep) %>% mutate(rank=rank(KL)) %>%
-  select(-c(KL, H, dataset)) %>% spread(rep, rank)
-kable(ranking[order(ranking$`1`),])
-```
-
-\newpage
-
-## Table: ranking of KL divergences for 10 replicates
+## ranking of KL divergences for 10 replicates
 ```{r}
 ranking = df[['kl']] %>% group_by(rep) %>% mutate(rank=rank(KL)) %>%
   select(-c(KL, H, dataset))
 maxrep = max(ranking$rep)
-myorder = ranking %>% filter(rep==maxrep) %>% arrange(rank) %>% ungroup() %>% select(algorithm)
+myorder = ranking %>% filter(rep==maxrep) %>% arrange(rank) %>% 
+  ungroup()%>% select(algorithm)
 ranking$algorithm = factor(ranking$algorithm, levels=myorder$algorithm)
 
 right_label <- levels(ranking$algorithm)
@@ -43,82 +35,72 @@ ggplot(ranking, aes(x=rep, y=rank, col=algorithm)) +
 
 \newpage
 
-## Table: KL divergences for 10 replicates
-```{r}
-kl = df[['kl']] %>% select(-c(H, dataset)) %>%  spread(rep, KL)
-kable(kl[order(kl$`1`),])
-```
-
-\newpage
-
 ## Marginals vs. SRF of replicate 1
-```{r fig.height=9, fig.width=10}
+```{r, fig.height=10, fig.width=20}
 replicate = 1
 df.plot = df[['plot']] %>% filter(rep==replicate) %>% ungroup() %>% select(-rep)
-temp = df[['kl']] %>% full_join(df[['rmsd']], by=c('rep', 'algorithm', 'dataset')) %>%
-  filter(rep==1)
-temp = temp[match(levels(df.plot$algorithm),temp$algorithm),]
+df.rmsd = df[['rmsd']] %>%ungroup()%>% mutate(rep=as.numeric(rep))
+df.kl = df[['kl']] %>% mutate(algorithm=droplevels(algorithm))
+temp = df.kl %>% full_join(df.rmsd, by=c('rep', 'algorithm', 'dataset')) %>%
+  filter(rep==replicate)
+temp = temp[match(origin,temp$algorithm),]
 
 f = function(.o,.f,.kl,.rmsd) paste0('list(atop(atop(',
                                      'textstyle(',deparse(.f),'),',
                                      'textstyle(RMSD == ',round(.rmsd,5),')),',
                                      'textstyle(KL == ',round(.kl,5),')))')
 
-label_formated= Map(.o=origin, .f=final2, .kl=temp$KL, .rmsd=temp$RMSD, f)
+label_formated= Map(.o=origin, .f=final2, .kl=temp$KL, .rmsd=temp$KL, f)
 label_formated = label_formated[match(levels(df.plot$algorithm),names(label_formated))]
 levels(df.plot$algorithm) = unlist(label_formated)
 ggplot(df.plot, aes(x=SRF, y=marginal)) +
-  theme(aspect.ratio = 1) +
+  theme(aspect.ratio = 1,strip.text.x = element_text(size = 10)) +
   facet_wrap( ~algorithm, scales = "free_y", ncol=4,labeller=label_parsed) +
   geom_point() +
-  labs(y="Log marginal probability", x="Log sample relative frequency")
+  xlab("Sample relative frequency (log scale)") +
+  ylab("Approximate marginal probability (log scale)")
 ```
 
 
 \newpage
 
-## Approximate vs. SRF posteriors of replicate 1
-```{r fig.height=9, fig.width=10}
+## Approximate posterior vs. SRF posteriors of replicate 1
+```{r, fig.height=10, fig.width=20}
 ggplot(df.plot, aes(x=SRF, y=Posterior)) +
   facet_wrap( ~algorithm, scales = "free_y", ncol=4,labeller=label_parsed) +
-  theme(aspect.ratio = 1) +
+  theme(aspect.ratio = 1,strip.text.x = element_text(size = 10)) +
+  geom_point(color='#66666670')+
+  xlab("Sample relative frequency (log scale)") +
+  ylab("Approximate posterior probability (log scale)")
+```
+
+
+
+\newpage
+
+## Split posterior probabilities approximate vs. SRF (replicate 1)
+```{r, fig.height=10, fig.width=20}
+df.splits = df[['splits']] %>% mutate(rep=as.numeric(rep)) %>% 
+  full_join(df.rmsd, by=c('algorithm','rep')) %>% 
+  full_join(df.kl, by=c('algorithm','rep','dataset')) %>%
+  filter(rep==replicate)
+colors = c(rgb(225,198,47,max=255),rgb(102,194,165,max=255),rgb(252,141,98,max=255))
+df.splits$color = colors[1]
+df.splits[df.splits$RMSD<0.01,]$color = colors[2]
+df.splits[df.splits$RMSD>0.05,]$color = colors[3]
+df.splits$color = factor(df.splits$color, levels=colors)
+
+df.splits = df.splits %>%
+  mutate(algorithm=factor(algorithm, levels=temp$algorithm[order(temp$RMSD,decreasing=F)]))
+label_formated= Map(.o=origin, .f=final2, .kl=temp$KL, .rmsd=temp$RMSD, f)
+label_formated = label_formated[match(levels(df.splits$algorithm),names(label_formated))]
+levels(df.splits$algorithm) = unlist(label_formated)
+ggplot(df.splits, aes(x=f, y=fhat, color=color)) +
+  facet_wrap( ~algorithm, scales = "free_y", ncol=4,labeller=label_parsed) +
+  theme(aspect.ratio = 1,strip.text.x = element_text(size = 10), legend.position="none") +
   geom_point()+
-  labs(y="Log posterior probability", x="Log sample relative frequency")
+  scale_color_manual(values=colors) +
+  scale_x_continuous(breaks = c(0, 0.5, 1)) +
+  labs(y="Approximate split posterior probability", x="SRF split posterior probabitlity")
 ```
 
-\newpage
-
-## Standard error using 10 replicates
-```{r}
-margs = df[['marginals']] %>% group_by(tree, algorithm) %>%
-  summarize(SE=sd(marginal), mean=mean(marginal),CV=sd(marginal)/mean(marginal)) %>%
-  filter(SE!=0) %>% as.data.frame
-
- myorder = margs %>% group_by(algorithm) %>% summarize(meanSE=mean(SE)) %>% as.data.frame
- margs$Method = factor(margs$algorithm, levels=myorder$algorithm[order(myorder$meanSE,decreasing=F)])
-
- mylabs = unlist(final2[match(levels(margs$Method),origin)])
-
- ggplot(margs, aes( x=Method, y=SE)) +
-   theme(axis.title.x=element_blank(),
-        axis.text.x = element_text(angle = 30, hjust = 1))+
-   geom_boxplot() +
-   scale_y_log10() +
-   scale_x_discrete(labels=mylabs) +
-   ylab("Standard error (log scale)")
-```
-
-\newpage
-
-## KL of 10 replicates
-```{r}
-all.kl = df[['kl']]
-myorder = all.kl %>% group_by(algorithm) %>% summarize(medianKL=median(KL)) %>%
-  arrange(medianKL) %>% select(algorithm) %>% unlist(use.names = FALSE) %>% as.vector
-
-all.kl$Method = factor(all.kl$algorithm, levels=myorder)
-all.kl$rep = factor(all.kl$rep, levels=unique(all.kl$rep))
-ggplot(all.kl, aes(x=Method)) + geom_point(aes(y=KL,col=rep)) +
-  theme(axis.text.x = element_text(angle = 30, hjust = 1)) +
-  scale_y_log10()
-```
