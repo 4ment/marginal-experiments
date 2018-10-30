@@ -44,9 +44,9 @@ knitr::opts_chunk$set(echo = TRUE, fig.path='Figs/')
 log.sum.exp<- function(x) {
   # Computes log(sum(exp(x))
   # Uses offset trick to avoid numeric overflow: http://jblevins.org/notes/log-sum-exp
-  if ( max(abs(x)) > max(x) )
-    offset <- min(x)
-  else
+  # if ( max(abs(x)) > max(x) )
+  #   offset <- min(x)
+  # else
     offset <- max(x)
   log(sum(exp(x - offset))) + offset
 }
@@ -138,7 +138,6 @@ splits <- function(data, ptrees){
 }
 
 read.ds <- function(dataset, force=F){
-  # dataset = 'DS1'
   #trees.file  = file.path('data', paste0(dataset, ".trees", sep=""))
   trees.file = paste0('/Users/mathieu/Desktop/marginal-experiments/data/JC_no_gamma_credible_set_ds', substr(dataset, nchar(dataset), nchar(dataset)))
   if(file.exists(paste0(dataset, '.Rdata')) & force!=T){
@@ -226,14 +225,22 @@ read.ds <- function(dataset, force=F){
   res
 }
 
+f = function(.o,.f,.kl,.rmsd) paste0('atop(atop(',
+                                     'textstyle(',deparse(.f),'),',
+                                     'textstyle(RMSD == "',formatC(.rmsd, format='e', digits=1),'")),',
+                                     'textstyle(KL == "',formatC(.kl, format='e', digits=1),'"))')
+
 datasets = paste0('DS', 1:5)
 
 origin=c('GSS', 'GLIS', 'VBIS', 'BS', 'SS', 'PS', 'PS2', 'LL', 'ML', 'MAP', 'GL',
                              'ELBO', 'LPPD', 'BL', 'CPO', 'SHM', 'HM', 'NS', 'NMC')
-final=c("GSS", expression("LG"["IS"]), expression("VB"["IS"]), "BS", "SS", "PS", "PSm", "LL", "ML", "MAP", "LG",
-                             "ELBO", "PPD", "LB", "CPO", "SHM", "HM", "NS", "NMC")
-final2=c("GSS", bquote("LG"["IS"]), bquote("VB"["IS"]), "BS", "SS", "PS", "PSm", "LL", "ML", "MAP", "LG",
-                             "ELBO", "PPD", "LB", "CPO", "SHM", "HM", "NS", "NMC")
+final=c("GSS", "GLIS", "VBIS", "BS", "SS", "PS", "MPS", "LL", "ML", "MAP", "GL",
+                             "ELBO", "PPD", "BL", "CPO", "SHM", "HM", "NS", "NMC")
+
+# final=c("GSS", expression("LG"["IS"]), expression("VB"["IS"]), "BS", "SS", "PS", "PSm", "LL", "ML", "MAP", "LG",
+#                              "ELBO", "PPD", "LB", "CPO", "SHM", "HM", "NS", "NMC")
+# final2=c("GSS", bquote("LG"["IS"]), bquote("VB"["IS"]), "BS", "SS", "PS", "PSm", "LL", "ML", "MAP", "LG",
+#                              "ELBO", "PPD", "LB", "CPO", "SHM", "HM", "NS", "NMC")
 
 color_datasets = c(rgb(141,160,203,max=255), rgb(252,141,98,max=255), rgb(102,194,165,max=255),
                    rgb(225,198,47,max=255),#rgb(175,175,175,max=255),
@@ -277,7 +284,7 @@ kable(df.plot)
 \newpage
 
 ## RMSD vs time
-```{r rmsd-time}
+```{r RMSD_vs_time}
 all.rmsd.time = all.rmsd %>% filter(!(algorithm %in% c('MAP', 'PS', 'PS2', 'BL'))) %>%
     group_by(algorithm, dataset) %>% summarise(medianRMSD=median(RMSD),meanRMSD=mean(RMSD)) %>% ungroup() %>%
     left_join(all.time, by=c('dataset','algorithm'))
@@ -299,7 +306,7 @@ ggplot(all.rmsd.time, aes(x=mean, y=meanRMSD, col=algorithm,label=label2)) +
 \newpage
 
 ## KL vs time
-```{r kl-time}
+```{r kl_vs_time}
 all.kl.time = all.kl %>% filter(!(algorithm %in% c('MAP', 'PS', 'PS2', 'BL'))) %>%
     group_by(algorithm, dataset) %>% summarise(medianKL=median(KL),meanKL=mean(KL)) %>% ungroup() %>%
     left_join(all.time, by=c('dataset','algorithm'))
@@ -317,7 +324,7 @@ ggplot(all.kl.time, aes(x=mean, y=meanKL, col=algorithm,label=label2)) +
 \newpage
 
 ## RMSD of 10 replicates
-```{r method-rmsd-all}
+```{r RMSD_by_method_and_dataset_with_replicates}
 all.rmsd$rep = factor(all.rmsd$rep, levels=unique(all.rmsd$rep))
 all.rmsd.determ = filter(all.rmsd, algorithm %in% c('ML', 'MAP', 'GL', 'LL', 'BL') & rep==1)
 all.rmsd = filter(all.rmsd, !(algorithm %in% c('ML', 'MAP', 'GL', 'LL', 'BL')))
@@ -345,7 +352,7 @@ ggplot(all.rmsd, aes(x=Method, y=RMSD,col=dataset)) +#, shape=dataset)) +
 \newpage
 
 ## KL of 10 replicates
-```{r method-kl-all}
+```{r kl_by_method_and_dataset_with_replicates}
 all.kl$rep = factor(all.kl$rep, levels=unique(all.kl$rep))
 all.kl.determ = filter(all.kl, algorithm %in% c('ML', 'MAP', 'GL', 'LL', 'BL') & rep==1)
 all.kl = filter(all.kl, !(algorithm %in% c('ML', 'MAP', 'GL', 'LL', 'BL')))
@@ -370,7 +377,7 @@ ggplot(all.kl, aes(x=Method, y=KL,col=dataset)) +#, shape=dataset)) +
 ```
 
 ## Standard error
-```{r es, fig.height=10, fig.width=10}
+```{r marginal-se, fig.height=10, fig.width=10}
 margs = all.marginal %>% group_by(dataset,algorithm, tree) %>%
   summarize(SE=sd(marginal), mean=mean(marginal),CV=sd(marginal)/mean(marginal)) %>%
   filter(SE!=0) %>% as.data.frame
@@ -378,7 +385,7 @@ margs = all.marginal %>% group_by(dataset,algorithm, tree) %>%
  myorder = margs %>% group_by(algorithm) %>% summarize(meanSE=mean(SE)) %>% as.data.frame
  margs$Method = factor(margs$algorithm, levels=myorder$algorithm[order(myorder$meanSE,decreasing=F)])
 
- mylabs = unlist(final2[match(levels(margs$Method),origin)])
+mylabs = final[match(levels(margs$Method), origin)]
 
  ggplot(margs, aes( x=Method, y=SE)) +
    theme(axis.title.x=element_blank(),
@@ -390,11 +397,125 @@ margs = all.marginal %>% group_by(dataset,algorithm, tree) %>%
    ylab("Standard error (log scale)")
 ```
 
-```{r, include=FALSE}
-out = NULL
-for(i in 1:length(datasets)){
-  out = c(out, knit_expand('DSx.Rmd'))
+\newpage
+
+```{r}
+
+plot.posterior.srf <- function(ds, replicate, breaks=NULL){
+  df.plot = all.plot %>% filter(dataset==ds&rep==replicate) %>% select(-rep)
+  df.rmsd = all.rmsd %>% filter(dataset==ds&rep==replicate) %>% select(-rep)
+  df.kl = all.kl %>% filter(dataset==ds&rep==replicate) %>% mutate(algorithm=droplevels(algorithm)) %>% select(-rep)
+  temp = df.kl %>% full_join(df.rmsd, by=c('algorithm', 'dataset','Method')) %>% arrange(RMSD)
+  df.plot = df.plot %>% mutate(algorithm=factor(algorithm, levels=temp$algorithm))
+
+  origin_ordered = origin[match(temp$algorithm, origin)]
+  final_ordered = final[match(temp$algorithm, origin)]
+  label_formated= Map(.o=origin_ordered, .f=final_ordered, .kl=temp$KL, .rmsd=temp$RMSD, f)
+  levels(df.plot$algorithm) = unlist(label_formated)
+  p = ggplot(df.plot, aes(x=SRF, y=Posterior)) +
+    facet_wrap( ~algorithm, scales = "free_y", ncol=4,labeller=label_parsed) +
+    theme(aspect.ratio = 1,strip.text.x = element_text(size = 9)) +
+    geom_point(color='#66666670')+
+    xlab("Sample relative frequency (log scale)") +
+    ylab("Approximate posterior probability (log scale)")
+  if(!is.null(breaks))
+    p = p + scale_x_continuous(breaks = breaks)
+  print(p)
+}
+
+plot.splits <- function(ds, replicate){
+  df = read.ds(ds)
+  df.splits = df[['splits']] %>% filter(rep==replicate)
+  df.rmsd = df[['rmsd']] %>% filter(rep==replicate)
+  df.kl = df[['kl']] %>% filter(rep==replicate)
+  df.splits = df.splits %>%
+    full_join(df.rmsd, by=c('algorithm')) %>%
+    full_join(df.kl, by=c('algorithm'))
+  colors = c(rgb(225,198,47,max=255),rgb(102,194,165,max=255),rgb(252,141,98,max=255))
+  df.splits$color = colors[1]
+  df.splits[df.splits$RMSD<0.01,]$color = colors[2]
+  df.splits[df.splits$RMSD>0.05,]$color = colors[3]
+  df.splits$color = factor(df.splits$color, levels=colors)
+
+  temp = df.kl %>% full_join(df.rmsd, by=c('algorithm'))
+  temp = temp[match(origin,temp$algorithm),]
+
+  df.splits = df.splits %>%
+    mutate(algorithm=factor(algorithm, levels=temp$algorithm[order(temp$RMSD,decreasing=F)]))
+  label_formated= Map(.o=origin, .f=final, .kl=temp$KL, .rmsd=temp$RMSD, f)
+  label_formated = label_formated[match(levels(df.splits$algorithm),names(label_formated))]
+  levels(df.splits$algorithm) = unlist(label_formated)
+  ggplot(df.splits, aes(x=f, y=fhat, color=color)) +
+    facet_wrap( ~algorithm, scales = "free_y", ncol=4,labeller=label_parsed) +
+    theme(aspect.ratio = 1,strip.text.x = element_text(size = 9), legend.position="none") +
+    geom_point()+
+    scale_color_manual(values=colors) +
+    scale_x_continuous(breaks = c(0, 0.5, 1)) +
+    labs(y="Approximate split posterior probability", x="SRF split posterior probabitlity")
 }
 ```
 
-`r paste(knit(text = out), collapse = '\n')`
+\newpage
+
+# DS1
+## Approximate posterior vs. SRF posteriors of replicate 1
+```{r DS1_scatterplot, fig.height=10, fig.width=20}
+plot.posterior.srf('DS1', 1, c(-6, -4, -2))
+```
+
+## Split posterior probabilities approximate vs. SRF (replicate 1)
+```{r DS1_split_probs, fig.height=10, fig.width=20}
+plot.splits('DS1', 1)
+```
+
+\newpage
+
+# DS2
+## Approximate posterior vs. SRF posteriors of replicate 1
+```{r DS2_scatterplot, fig.height=10, fig.width=20}
+plot.posterior.srf('DS2', 1, c(-3, -2, -1))
+```
+
+## Split posterior probabilities approximate vs. SRF (replicate 1)
+```{r DS2_split_probs, fig.height=10, fig.width=20}
+plot.splits('DS2', 1)
+```
+
+\newpage
+
+# DS3
+## Approximate posterior vs. SRF posteriors of replicate 1
+```{r DS3_scatterplot, fig.height=10, fig.width=20}
+plot.posterior.srf('DS3', 1, c(-5, -3, -1))
+```
+
+## Split posterior probabilities approximate vs. SRF (replicate 1)
+```{r DS3_split_probs, fig.height=10, fig.width=20}
+plot.splits('DS3', 1)
+```
+
+\newpage
+
+# DS4
+## Approximate posterior vs. SRF posteriors of replicate 1
+```{r DS4_scatterplot, fig.height=10, fig.width=20}
+plot.posterior.srf('DS4', 1)#, c(-8, -6, -4, -2))
+```
+
+## Split posterior probabilities approximate vs. SRF (replicate 1)
+```{r DS4_split_probs, fig.height=10, fig.width=20}
+plot.splits('DS4', 1)
+```
+
+\newpage
+
+# DS5
+## Approximate posterior vs. SRF posteriors of replicate 1
+```{r DS5_scatterplot, fig.height=10, fig.width=20}
+plot.posterior.srf('DS5', 1, c(-9, -8, -7))
+```
+
+## Split posterior probabilities approximate vs. SRF (replicate 1)
+```{r DS5_split_probs, fig.height=10, fig.width=20}
+plot.splits('DS5', 1)
+```
