@@ -23,7 +23,7 @@ p.add_argument('-t', '--threads', type=int, default=2)
 arg = p.parse_args()
 
 models = ('JC69',)
-datasets = ('DS1', 'DS2', 'DS3', 'DS3s', 'DS4', 'DS5')
+datasets = ('DS1', 'DS2', 'DS3', 'DS4', 'DS5')
 rootdir = os.getcwd()
 templatedir = os.path.join(rootdir, 'templates')
 datadir = os.path.join(rootdir, 'data')
