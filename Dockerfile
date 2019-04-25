@@ -11,8 +11,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 	unzip \
 	wget
 	
-RUN wget https://github.com/4ment/physher/archive/marginal-v1.0.zip && unzip marginal-v1.0.zip
-WORKDIR /physher-marginal-v1.0/Release
+RUN wget https://github.com/4ment/physher/archive/marginal-v1.1.zip && unzip marginal-v1.1.zip
+WORKDIR /physher-marginal-v1.1/Release
 RUN cmake -DBUILD_SHARED_LIBS=OFF .. && make && make install
 WORKDIR /data
 

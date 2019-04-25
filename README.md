@@ -8,7 +8,7 @@ Fourment M, Magee A, Whidden C, Bilge A, Matsen IV FA, Minin VN. 19 dubious ways
 
 ## [physher](https://github.com/4ment/physher)
 
-To reproduce the analysis the release [marginal-v1.0](https://github.com/4ment/physher/releases/tag/marginal-v1.0) should be used and the executable should be located in the `bin` directory.
+To reproduce the analysis the release [marginal-v1.1](https://github.com/4ment/physher/releases/tag/marginal-v1.1) should be used and the executable should be located in the `bin` directory.
 
 # Running the simulations
 
